@@ -3,7 +3,7 @@ from sqlalchemy.orm import sessionmaker
 from models import Base, CandidateProfile
 import json
 
-engine = create_engine("sqlite:///applyai.db", connect_args={"check_same_thread": False})
+engine = create_engine("sqlite:////app/data/applyai.db", connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 
 

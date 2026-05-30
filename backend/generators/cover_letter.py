@@ -1,35 +1,46 @@
 import os
 import httpx
 import json
+import re
+
+
+def _strip_html(text: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&[a-z]+;", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 async def generate_cover_letter(job_title: str, company: str, job_description: str, profile: dict) -> str:
-    prompt = f"""You are writing a cover letter for {profile['name']}.
+    clean_jd = _strip_html(job_description)[:2000]
+    prompt = f"""Write a cover letter from Subarna Katwal applying for {job_title} at {company}.
 
-CANDIDATE PROFILE:
-- Name: {profile['name']}
-- Email: {profile['email']}
-- Skills: {', '.join(json.loads(profile['skills']))}
-- Summary: {profile['summary']}
-- Recent learning: {_format_learning(profile.get('learning_log', '[]'))}
+ABOUT SUBARNA:
+{profile['summary']}
 
-JOB: {job_title} at {company}
+Resume:
+{profile.get('resume_text', '')}
+
+Skills: {', '.join(json.loads(profile['skills']))}
+Recent learning: {_format_learning(profile.get('learning_log', '[]'))}
 
 JOB DESCRIPTION:
-{job_description[:2000]}
+{clean_jd}
 
-Write a concise, personalized cover letter (3 paragraphs max).
-- Match specific skills from profile to job requirements
-- Sound human, not generic
-- Mention 1-2 specific projects that are relevant
-- End with clear call to action
-- No filler phrases like "I am excited to apply"
-- No placeholders like [Your Name]
+Rules:
+- 3 tight paragraphs, no greeting/sign-off
+- Paragraph 1: why this specific role at this specific company (use JD details)
+- Paragraph 2: 1-2 concrete projects from resume that directly map to JD requirements
+- Paragraph 3: one sentence ask
+- Use plain dashes (-) not em-dashes (--)
+- No "I am excited", no "I would love to", no placeholders, no brackets
+- Write as Subarna in first person, confident tone
+- Do NOT use the word "dynamic", "passionate", "leverage", "hone", or "foster"
 
-Return only the cover letter body, no subject line."""
+Return only the 3 paragraphs. Nothing else."""
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(

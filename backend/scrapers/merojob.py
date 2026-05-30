@@ -1,43 +1,45 @@
 import httpx
-from bs4 import BeautifulSoup
 from datetime import datetime
 
 
 async def scrape_merojob(keywords: list[str]) -> list[dict]:
     jobs = []
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    seen_ids = set()
+    headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
-    for keyword in keywords:
-        url = f"https://merojob.com/search/?q={keyword.replace(' ', '+')}"
-        try:
-            async with httpx.AsyncClient(timeout=20, headers=headers) as client:
-                resp = await client.get(url)
-                soup = BeautifulSoup(resp.text, "html.parser")
+    tags = {
+        "APM": ["product-manager", "product"],
+        "Technical": ["engineer", "developer"],
+        "Product": ["product-manager", "product"],
+        "AI": ["ai", "machine-learning"],
+    }
 
-                cards = soup.select("div.card.job-card") or soup.select(".job-list-item") or soup.select("article")
-                for card in cards[:20]:
-                    title_el = card.select_one("h1 a, h2 a, h3 a, .job-title a")
-                    company_el = card.select_one(".company-name, .employer-name")
-                    location_el = card.select_one(".location, .job-location")
-                    link_el = card.select_one("a[href]")
+    fetch_tags = set()
+    for kw in keywords:
+        fetch_tags.update(tags.get(kw, [kw.lower().replace(" ", "-")]))
 
-                    if not title_el:
+    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+        for tag in fetch_tags:
+            try:
+                resp = await client.get(f"https://remoteok.com/api?tag={tag}")
+                data = resp.json()
+                for j in data:
+                    if not isinstance(j, dict) or "position" not in j:
                         continue
-
-                    job_url = link_el["href"] if link_el else ""
-                    if job_url and not job_url.startswith("http"):
-                        job_url = "https://merojob.com" + job_url
-
+                    job_id = str(j.get("id", ""))
+                    if job_id in seen_ids:
+                        continue
+                    seen_ids.add(job_id)
                     jobs.append({
-                        "title": title_el.get_text(strip=True),
-                        "company": company_el.get_text(strip=True) if company_el else "Unknown",
-                        "location": location_el.get_text(strip=True) if location_el else "Nepal",
-                        "description": card.get_text(strip=True)[:500],
-                        "url": job_url,
-                        "source": "merojob",
+                        "title": j.get("position", ""),
+                        "company": j.get("company", "Unknown"),
+                        "location": j.get("location") or "Remote",
+                        "description": j.get("description", "")[:500],
+                        "url": j.get("url") or f"https://remoteok.com/l/{job_id}",
+                        "source": "remoteok",
                         "found_at": datetime.utcnow(),
                     })
-        except Exception as e:
-            print(f"Merojob scrape error: {e}")
+            except Exception as e:
+                print(f"RemoteOK scrape error [{tag}]: {e}")
 
     return jobs
